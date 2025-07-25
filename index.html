@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Voice Flappy Bird</title>
+<style>
+html,body{margin:0;overflow:hidden;background:#70c5ce}
+canvas{display:block}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+let W = canvas.width = innerWidth;
+let H = canvas.height = innerHeight;
+
+// Bird setup
+let bird = {x: 100, y: H/2, vy: 0, r: 20};
+
+// Pipes
+let pipes = [];
+let gap = 200, pipeWidth = 80, pipeSpeed = 3, frame = 0, pipeRate = 90;
+let score = 0, gameOver = false;
+
+// Sound volume
+let volume = 0;
+
+function resetGame() {
+ bird.y = H/2;
+ bird.vy = 0;
+ pipes = [];
+ score = 0;
+ frame = 0;
+ gameOver = false;
+}
+
+function drawBird() {
+ ctx.fillStyle = "#ff0";
+ ctx.beginPath();
+ ctx.arc(bird.x, bird.y, bird.r, 0, 2*Math.PI);
+ ctx.fill();
+}
+
+function drawPipes() {
+ ctx.fillStyle = "#0f0";
+ pipes.forEach(p => {
+  ctx.fillRect(p.x, 0, pipeWidth, p.top);
+  ctx.fillRect(p.x, p.top + gap, pipeWidth, H);
+ });
+}
+
+function drawScore() {
+ ctx.fillStyle = "#000";
+ ctx.font = "bold 32px sans-serif";
+ ctx.fillText("Score: " + score, 20, 40);
+}
+
+function drawGameOver() {
+ ctx.fillStyle = "#000";
+ ctx.font = "bold 48px sans-serif";
+ ctx.fillText("Game Over", W/2 - 130, H/2);
+ ctx.font = "24px sans-serif";
+ ctx.fillText("Make a sound to restart", W/2 - 130, H/2 + 40);
+}
+
+function updateGame() {
+ if (gameOver) {
+  if (volume > 0.05) resetGame();
+  return;
+ }
+
+ bird.vy += 0.5;
+ bird.y += bird.vy;
+
+ if (volume > 0.05) bird.vy = -8;
+
+ // Add pipes
+ if (frame++ % pipeRate === 0) {
+  let top = 50 + Math.random() * (H - gap - 100);
+  pipes.push({x: W, top, passed: false});
+ }
+
+ // Move pipes
+ pipes.forEach(p => p.x -= pipeSpeed);
+ pipes = pipes.filter(p => p.x + pipeWidth > 0);
+
+ // Collision + score
+ pipes.forEach(p => {
+  if (!p.passed && p.x + pipeWidth < bird.x) {
+   score++; p.passed = true;
+  }
+  if (
+   bird.x + bird.r > p.x && bird.x - bird.r < p.x + pipeWidth &&
+   (bird.y - bird.r < p.top || bird.y + bird.r > p.top + gap)
+  ) gameOver = true;
+ });
+
+ if (bird.y > H || bird.y < 0) gameOver = true;
+}
+
+function gameLoop() {
+ ctx.clearRect(0, 0, W, H);
+ updateGame();
+ drawBird();
+ drawPipes();
+ drawScore();
+ if (gameOver) drawGameOver();
+ requestAnimationFrame(gameLoop);
+}
+gameLoop();
+
+// ---- Microphone Volume Detection ----
+navigator.mediaDevices.getUserMedia({audio: true}).then(stream => {
+ const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+ const mic = audioCtx.createMediaStreamSource(stream);
+ const analyser = audioCtx.createAnalyser();
+ analyser.fftSize = 256;
+ const data = new Uint8Array(analyser.fftSize);
+ mic.connect(analyser);
+
+ function detect() {
+  analyser.getByteTimeDomainData(data);
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) {
+   let val = (data[i] - 128) / 128;
+   sum += val * val;
+  }
+  volume = Math.sqrt(sum / data.length);
+  requestAnimationFrame(detect);
+ }
+ detect();
+}).catch(err => {
+ alert("Microphone access is required to play.");
+});
+</script>
+</body>
+</html>
